@@ -1,0 +1,15 @@
+{
+  "name": "Лист персонажа (українською)",
+  "version": "0.2.0",
+  "manifest_version": 1,
+  "description": "Лист персонажа D&D 5e українською мовою.",
+  "author": "Nikita",
+  "icon": "https://treyser.github.io/lyst-personazha/icon.svg",
+  "action": {
+    "title": "Лист персонажа",
+    "icon": "https://treyser.github.io/lyst-personazha/icon.svg",
+    "popover": "https://treyser.github.io/lyst-personazha/index.html",
+    "width": 1020,
+    "height": 740
+  }
+}
