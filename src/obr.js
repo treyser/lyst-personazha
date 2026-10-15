@@ -1,9 +1,9 @@
 import OBR from "@owlbear-rodeo/sdk";
 import * as sheet from "./sheet.js";
+import { KEY, PUSH, LIMIT, MINE, useRoom, serve, getMine, setMine, getParty, dropCopy, mineKey, partyKey, updateIndex, bytes } from "./store.js";
 
-// Метадані кімнати живуть стільки ж, скільки кімната.
-// Метадані гравця вмирають при перезавантаженні сторінки, тому вони не годяться.
-const KEY = "com.nikita.character-sheet/sheets";
+// Свій лист зберігається в цьому браузері й розсилається майстрові; у кімнаті — лише ім'я і Спритність.
+// Подробиці — у store.js.
 
 const $ = (id) => document.getElementById(id);
 const sync = $("sync");
@@ -12,21 +12,11 @@ const gmPick = $("gm-pick");
 const gmNote = $("gm-note");
 const gmDel = $("gm-del");
 
-// Стабільний ідентифікатор власника листа. id гравця змінюється при кожному
-// підключенні, тому тримаємо свій у localStorage браузера.
-const MINE = (() => {
-  let id = localStorage.getItem("sheet-owner");
-  if (!id) {
-    id = "u" + Math.random().toString(36).slice(2, 10);
-    localStorage.setItem("sheet-owner", id);
-  }
-  return id;
-})();
-
 let viewing = "";      // чий лист відкрито; "" — свій
-let applying = false;  // щоб зміни ззовні не тригерили зворотний запис
+let applying = false;  // щоб показ чужих змін не запускав зворотний запис
 let timer = null;
 let isGM = false;
+let index = {};        // покажчик листів з кімнати
 
 if (!OBR.isAvailable) {
   sync.textContent = "Відкрито поза Owlbear — зміни лише в цій вкладці";
@@ -35,101 +25,106 @@ if (!OBR.isAvailable) {
 }
 
 async function init() {
+  await useRoom();
   sync.textContent = "Підключено";
-
   isGM = (await OBR.player.getRole()) === "GM";
   if (isGM) gmBox.hidden = false;
+  serve().catch((err) => console.error("Лист персонажа:", err));
 
-  const meta = await OBR.room.getMetadata();
-  handleSheets(meta[KEY]);
+  index = (await OBR.room.getMetadata())[KEY] ?? {};
+  // старий формат (весь лист у кімнаті) ще не перенесено — візьмемо свій звідти
+  const mine = getMine() ?? (index[MINE] && !index[MINE].lite ? { data: index[MINE] } : null);
+  show(mine?.data ?? {}, "");
+  if (!getMine() && !index[MINE]) sync.textContent = "Новий лист — заповнюй, усе збережеться само";
+  if (isGM) fillPartyList();
 
-  OBR.room.onMetadataChange((m) => handleSheets(m[KEY]));
+  OBR.room.onMetadataChange((m) => { index = m[KEY] ?? {}; if (isGM) fillPartyList(); });
+
+  // Фоновий скрипт міг отримати лист (свій — від майстра, чужий — від гравця): показати свіже
+  window.addEventListener("storage", (e) => {
+    if (e.key === mineKey() && !viewing && !typing()) show(getMine()?.data ?? {}, "");
+    if (e.key === partyKey() && isGM) {
+      fillPartyList();
+      if (viewing) show(getParty()[viewing]?.data ?? {}, nameOf(viewing));
+    }
+  });
 
   document.addEventListener("input", scheduleSave, true);
   document.addEventListener("click", scheduleSave, true);
 
   if (isGM) {
-    gmPick.addEventListener("change", async () => {
+    gmPick.addEventListener("change", () => {
+      clearTimeout(timer);   // відкладене збереження свого листа вже не актуальне
       viewing = gmPick.value;
-      const m = await OBR.room.getMetadata();
-      const sheets = m[KEY] ?? {};
-      if (!viewing) {
-        show(sheets[MINE] ?? {}, "");
-      } else {
-        show(sheets[viewing], sheets[viewing]?.name?.trim() || "гравець");
+      if (!viewing) show(getMine()?.data ?? {}, "");
+      else {
+        const copy = getParty()[viewing];
+        show(copy?.data ?? {}, nameOf(viewing));
+        if (!copy) gmNote.textContent = "Копії цього листа в цьому браузері ще немає — вона прийде, щойно гравець зайде в кімнату";
       }
       gmDel.hidden = !viewing;
     });
-
     gmDel.addEventListener("click", deleteSheet);
   }
 }
 
-// Приходить весь набір листів кімнати
-function handleSheets(sheets) {
-  sheets = sheets ?? {};
+// чи людина саме щось друкує — тоді не перемальовуємо форму в неї під руками
+const typing = () => document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && Date.now() - lastInput < 3000;
+let lastInput = 0;
 
-  if (isGM) fillPartyList(sheets);
-
-  if (applying) return;
-
-  const id = viewing || MINE;
-  const data = sheets[id];
-  if (!data) return;
-
-  applying = true;
-  sheet.applyData(data);
-  applying = false;
-}
+const nameOf = (id) => (getParty()[id]?.data?.name || index[id]?.name || "").trim() || "Без імені";
 
 function scheduleSave() {
+  lastInput = Date.now();
   if (applying || viewing) return;
   clearTimeout(timer);
   timer = setTimeout(save, 600);
 }
 
 async function save() {
+  if (viewing || applying) return;   // відкрито чужий лист — свій не чіпаємо
   try {
-    // читаємо свіжий набір, щоб не затерти листи інших гравців
-    const meta = await OBR.room.getMetadata();
-    const sheets = { ...(meta[KEY] ?? {}) };
-    sheets[MINE] = sheet.collect();
-    await OBR.room.setMetadata({ [KEY]: sheets });
-    sync.textContent = "Збережено " + new Date().toLocaleTimeString("uk");
+    const data = sheet.collect();
+    const at = setMine(data);
+    if (bytes(data) > LIMIT) {
+      sync.textContent = "Збережено лише в цьому браузері: лист завеликий, щоб надіслати майстрові";
+    } else {
+      await OBR.broadcast.sendMessage(PUSH, { id: MINE, data, at }, { destination: "REMOTE" });
+      sync.textContent = "Збережено " + new Date().toLocaleTimeString("uk");
+    }
+    await updateIndex(MINE, data);
   } catch (err) {
-    sync.textContent = "Не вдалося зберегти — можливо, лист завеликий";
+    sync.textContent = "Не вдалося зберегти";
     console.error(err);
   }
 }
 
 // --- Режим Майстра ---
 
-function fillPartyList(sheets) {
-  const ids = Object.keys(sheets).filter((id) => id !== MINE);
+function fillPartyList() {
+  const party = getParty();
+  const ids = [...new Set([...Object.keys(index), ...Object.keys(party)])].filter((id) => id !== MINE);
   const keep = gmPick.value;
   gmPick.innerHTML = '<option value="">Мій лист</option>';
-  for (const id of ids) {
-    gmPick.appendChild(new Option(sheets[id].name?.trim() || "Без імені", id));
-  }
-  gmPick.value = keep;
+  for (const id of ids) gmPick.appendChild(new Option(nameOf(id) + (party[id] ? "" : " (копії ще немає)"), id));
+  gmPick.value = ids.includes(keep) ? keep : "";
 }
 
-// Прибрати лист гравця, який більше не в кімнаті
+// Прибрати лист гравця, який більше не грає
 async function deleteSheet() {
   if (!viewing) return;
-  const m = await OBR.room.getMetadata();
-  const sheets = { ...(m[KEY] ?? {}) };
-  const label = sheets[viewing]?.name?.trim() || "без імені";
+  const label = nameOf(viewing);
   if (!confirm(`Видалити лист «${label}»? Скасувати буде неможливо.`)) return;
-
-  delete sheets[viewing];
-  await OBR.room.setMetadata({ [KEY]: sheets });
-
+  dropCopy(viewing);
+  const m = await OBR.room.getMetadata();
+  const next = { ...(m[KEY] ?? {}) };
+  delete next[viewing];
+  await OBR.room.setMetadata({ [KEY]: next });
   viewing = "";
   gmPick.value = "";
   gmDel.hidden = true;
-  const fresh = await OBR.room.getMetadata();
-  show((fresh[KEY] ?? {})[MINE] ?? {}, "");
+  show(getMine()?.data ?? {}, "");
+  fillPartyList();
   gmNote.textContent = `Лист «${label}» видалено`;
 }
 
@@ -137,11 +132,8 @@ function show(data, owner) {
   applying = true;
   sheet.applyData(data ?? {});
   applying = false;
-  // блокування знімаємо останнім, після перемальовування форми
   setReadonly(Boolean(owner));
-  sync.textContent = owner
-    ? "Чужий лист — редагування вимкнено"
-    : "Твій лист";
+  sync.textContent = owner ? "Чужий лист — редагування вимкнено" : "Твій лист";
   if (isGM) gmNote.textContent = owner ? `Лист «${owner}»` : "";
 }
 
@@ -153,4 +145,3 @@ function setReadonly(on) {
     el.disabled = on;
   });
 }
-
