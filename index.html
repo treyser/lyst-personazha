@@ -20,7 +20,28 @@
 
   <!-- ЛІВА КОЛОНКА -->
   <div class="col">
-    <div class="box brand">Лист персонажа</div>
+    <div class="hero" id="hero">
+      <div class="pic" id="pic">
+        <img id="pic-img" alt="" hidden>
+        <div class="pic-empty" id="pic-empty"><b>⚜</b><span>Додай портрет героя</span></div>
+      </div>
+      <div class="hero-cap">
+        <div class="hero-name" id="hero-name">Лист персонажа</div>
+        <div class="hero-sub" id="hero-sub"></div>
+      </div>
+      <div class="pic-tools" id="pic-tools">
+        <button type="button" class="ghost" id="pic-token" hidden title="Взяти картинку виділеного на мапі токена">З токена</button>
+        <button type="button" class="ghost" id="pic-file">Файл</button>
+        <button type="button" class="ghost" id="pic-link">Посилання</button>
+        <button type="button" class="ghost" id="pic-del" title="Прибрати портрет" hidden>✕</button>
+      </div>
+      <div class="pic-url" id="pic-url" hidden>
+        <input id="pic-url-in" placeholder="https://… посилання на картинку">
+        <button type="button" id="pic-url-ok">OK</button>
+      </div>
+      <div class="pic-note" id="pic-note"></div>
+      <input type="file" id="pic-input" accept="image/*" hidden>
+    </div>
 
     <div class="stats">
       <div class="stat"><label>Сила</label><div class="row"><input id="s-str" type="number" value="10"><span class="slash">/</span><span class="mod" id="m-str">+0</span></div></div>
