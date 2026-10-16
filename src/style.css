@@ -30,12 +30,38 @@ h2{
   font-family:var(--serif); font-weight:700; font-size:22px; line-height:1.1;
   margin:0 0 8px; color:#fbf3dc; letter-spacing:.01em;
 }
-.brand{
-  font-family:var(--serif); font-weight:700; font-size:30px; text-align:center; line-height:1;
-  color:var(--gold2); text-shadow:0 0 18px rgba(232,194,122,.25); padding:12px 8px;
-  background:radial-gradient(ellipse at center, rgba(232,194,122,.12), transparent 70%), var(--card);
-  border:1px solid var(--line);
+/* картка героя з портретом — як у крамниці */
+.hero{
+  position:relative; border-radius:14px; overflow:hidden;
+  border:1px solid var(--line); background:var(--card);
+  box-shadow:0 10px 26px rgba(0,0,0,.4), inset 0 0 0 1px rgba(232,194,122,.08);
 }
+.pic{position:relative; height:250px; cursor:pointer;
+  background:radial-gradient(ellipse at 50% 35%, rgba(232,194,122,.14), transparent 65%), #10141b}
+.hero.has-pic .pic{cursor:default}
+.pic img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 18%}
+.pic::after{content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(180deg, rgba(11,16,22,0) 45%, rgba(11,16,22,.55) 72%, rgba(11,16,22,.96) 100%),
+             radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%)}
+.pic-empty{position:absolute; inset:0 0 70px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  color:var(--gold); opacity:.75; font-size:12px; letter-spacing:.14em; text-transform:uppercase}
+.pic-empty b{font-size:42px; font-weight:400; color:var(--gold2); text-shadow:0 0 22px rgba(232,194,122,.35); letter-spacing:0}
+.pic-empty[hidden]{display:none}
+.hero-cap{position:absolute; left:0; right:0; top:250px; transform:translateY(-100%); padding:0 14px 10px; pointer-events:none; z-index:1}
+.hero-name{font-family:var(--serif); font-weight:700; font-size:28px; line-height:1.05; color:#fbf3dc;
+  text-shadow:0 2px 10px rgba(0,0,0,.8), 0 0 18px rgba(232,194,122,.2)}
+.hero-sub{margin-top:3px; font-family:var(--serif); font-style:italic; font-size:15px; color:var(--gold2); text-shadow:0 1px 6px rgba(0,0,0,.9)}
+.hero-sub:empty{display:none}
+.pic-tools{display:flex; gap:5px; padding:8px 10px; border-top:1px solid rgba(232,194,122,.18)}
+.pic-tools button{flex:1; padding:5px 6px; font-size:12px}
+.pic-tools #pic-del{flex:0 0 auto; padding:5px 9px}
+.pic-tools[hidden], .pic-url[hidden]{display:none}
+.pic-url{display:flex; gap:5px; padding:0 10px 8px}
+.pic-url input{padding:5px 8px; font-size:12.5px}
+.pic-url button{padding:5px 10px; font-size:12px}
+.pic-note{font-size:12px; color:#ffb4a6; padding:0 12px}
+.pic-note:empty{display:none}
+.pic-note:not(:empty){padding-bottom:8px}
 label{
   display:block; margin-bottom:4px;
   font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); opacity:.9;
@@ -147,7 +173,9 @@ td:first-child input{font-family:var(--serif); font-size:15px; font-weight:700}
     @page{ margin:12mm; }
     body{ background:#fff !important; color:#000 !important; padding:0; font-size:11pt; }
     *{ color:#000 !important; text-shadow:none !important; box-shadow:none !important; }
-    .box, .stat, .brand, .coins > div{ background:#fff !important; }
+    .box, .stat, .hero, .coins > div{ background:#fff !important; }
+    .pic-tools, .pic-url, .pic-note, .pic-empty, .pic::after{ display:none !important; }
+    .hero-name, .hero-sub{ color:#000 !important; text-shadow:none !important; }
 
     /* на папір ідуть усі вкладки, а не лише відкрита */
     .panel[hidden]{ display:block !important; }

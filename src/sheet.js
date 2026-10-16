@@ -9,6 +9,7 @@ const state = {
   gear: [],
   hpmax: 1,
   acbase: 10,
+  portrait: '',
 };
 
 const RACES = ['Дворф','Ельф','Піврослик','Людина','Гном','Драконородний','Напівельф','Напіворк',
@@ -202,7 +203,7 @@ $('file').addEventListener('change', async e => {
   e.target.value = '';
 });
 
-const BLANK = { langs:[], attacks:[], spells:[], talents:[], gear:[], hpmax:1, acbase:10 };
+const BLANK = { langs:[], attacks:[], spells:[], talents:[], gear:[], hpmax:1, acbase:10, portrait:'' };
 
 function applyData(data){
   data = data ?? {};
@@ -213,16 +214,94 @@ function applyData(data){
   Object.assign(state, BLANK, {
     langs: data.langs ?? [], attacks: data.attacks ?? [], spells: data.spells ?? [],
     talents: data.talents ?? [], gear: data.gear ?? [],
-    hpmax: data.hpmax ?? 1, acbase: data.acbase ?? 10,
+    hpmax: data.hpmax ?? 1, acbase: data.acbase ?? 10, portrait: data.portrait ?? '',
   });
   STATS.forEach(s => { if(data.stats?.[s] != null) $('s-' + s).value = data.stats[s]; });
   FIELDS.forEach(f => { if(data[f] != null) $(f).value = data[f]; });
   drawAll();
 }
 
+// --- портрет і картка героя ---
+const PIC_MAX = 9000;   // символів у стиснутій картинці: лист має влізти в одне повідомлення майстрові
+
+function renderHero(){
+  const url = state.portrait || '';
+  const img = $('pic-img');
+  if(url){ if(img.getAttribute('src') !== url) img.src = url; img.hidden = false; }
+  else { img.hidden = true; img.removeAttribute('src'); }
+  $('pic-empty').hidden = Boolean(url);
+  $('pic-del').hidden = !url;
+  $('hero').classList.toggle('has-pic', Boolean(url));
+  $('hero-name').textContent = $('name').value.trim() || 'Лист персонажа';
+  const lvl = Number($('level').value) || 1;
+  const cls = $('class').value;
+  $('hero-sub').textContent = [$('ancestry').value, cls && `${cls}, ${lvl} рівень`].filter(Boolean).join(' · ');
+}
+['name','ancestry','class','xp'].forEach(id => $(id).addEventListener('input', renderHero));
+['ancestry','class'].forEach(id => $(id).addEventListener('change', renderHero));
+$('pic-img').addEventListener('error', () => { $('pic-note').textContent = 'Картинка не завантажилась — перевір посилання'; });
+$('pic-img').addEventListener('load', () => { $('pic-note').textContent = ''; });
+
+// змінити портрет; зберігає obr.js — він слухає подію
+function setPortrait(url){
+  state.portrait = url || '';
+  renderHero();
+  document.dispatchEvent(new CustomEvent('sheet-changed'));
+}
+
+// Стиснути картинку з файлу до маленького портрета (3:4, обріз по центру, ближче до верху — там обличчя)
+function shrink(file){
+  return new Promise((ok, fail) => {
+    const src = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(src);
+      const tries = [[240,320,.7],[180,240,.8],[180,240,.65],[150,200,.7],[150,200,.55],[120,160,.6],[120,160,.45]];
+      for(const [w,h,q] of tries){
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const g = c.getContext('2d');
+        const s = Math.max(w / im.width, h / im.height);
+        const dw = im.width * s, dh = im.height * s;
+        g.drawImage(im, (w - dw) / 2, Math.min(0, (h - dh) * 0.25), dw, dh);
+        let url = c.toDataURL('image/webp', q);
+        if(!url.startsWith('data:image/webp')) url = c.toDataURL('image/jpeg', q);
+        if(url.length <= PIC_MAX) return ok(url);
+      }
+      fail(new Error('завелика'));
+    };
+    im.onerror = () => { URL.revokeObjectURL(src); fail(new Error('не картинка')); };
+    im.src = src;
+  });
+}
+
+$('pic-file').addEventListener('click', () => $('pic-input').click());
+$('pic-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  try{ setPortrait(await shrink(file)); $('pic-note').textContent = ''; }
+  catch{ $('pic-note').textContent = 'Не вдалося прочитати картинку'; }
+});
+$('pic-link').addEventListener('click', () => {
+  const box = $('pic-url');
+  box.hidden = !box.hidden;
+  if(!box.hidden){ $('pic-url-in').value = /^https?:/.test(state.portrait) ? state.portrait : ''; $('pic-url-in').focus(); }
+});
+function applyLink(){
+  const url = $('pic-url-in').value.trim();
+  if(url && !/^https?:\/\//.test(url)){ $('pic-note').textContent = 'Потрібне посилання, що починається з https://'; return; }
+  $('pic-url').hidden = true;
+  setPortrait(url);
+}
+$('pic-url-ok').addEventListener('click', applyLink);
+$('pic-url-in').addEventListener('keydown', e => { if(e.key === 'Enter') applyLink(); });
+$('pic-del').addEventListener('click', () => setPortrait(''));
+$('pic').addEventListener('click', () => { if(!state.portrait && !$('pic-file').disabled) $('pic-file').click(); });
+
 function drawAll(){
   renderStats();
   renderXp();
+  renderHero();
   Object.keys(ROWS).forEach(renderList);
   renderLangs();
 }
@@ -238,4 +317,4 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
   });
 });
 
-export { collect, applyData, drawAll, state };
+export { collect, applyData, drawAll, state, setPortrait };

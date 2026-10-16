@@ -51,6 +51,11 @@ async function init() {
 
   document.addEventListener("input", scheduleSave, true);
   document.addEventListener("click", scheduleSave, true);
+  document.addEventListener("sheet-changed", scheduleSave);
+
+  // портрет із виділеного на мапі токена
+  $("pic-token").hidden = false;
+  $("pic-token").addEventListener("click", pickToken);
 
   if (isGM) {
     gmPick.addEventListener("change", () => {
@@ -95,6 +100,22 @@ async function save() {
     await updateIndex(MINE, data);
   } catch (err) {
     sync.textContent = "Не вдалося зберегти";
+    console.error(err);
+  }
+}
+
+async function pickToken() {
+  const note = $("pic-note");
+  try {
+    const ids = (await OBR.player.getSelection()) ?? [];
+    if (!ids.length) { note.textContent = "Спершу виділи свій токен на мапі"; return; }
+    const items = await OBR.scene.items.getItems(ids);
+    const url = items.find((i) => i.image?.url)?.image.url;
+    if (!url) { note.textContent = "У виділеного немає картинки"; return; }
+    note.textContent = "";
+    sheet.setPortrait(url);
+  } catch (err) {
+    note.textContent = "Не вдалося взяти токен — відкрий сцену";
     console.error(err);
   }
 }
@@ -144,4 +165,6 @@ function setReadonly(on) {
     if (el.id === "print") return;
     el.disabled = on;
   });
+  $("pic-tools").hidden = on;
+  $("pic-url").hidden = true;
 }
